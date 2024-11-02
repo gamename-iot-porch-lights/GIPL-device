@@ -1,0 +1,3 @@
+main/certs/** filter=git-crypt diff=git-crypt
+sdkconfig** filter=git-crypt diff=git-crypt
+Kconfig filter=git-crypt diff=git-crypt
