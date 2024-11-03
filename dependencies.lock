@@ -1,38 +1,4 @@
 dependencies:
-  espressif/bh1750:
-    component_hash: c8cae6dca70fd5fdf5943ae37efbbea6cc41bcb784506e61ea301b3e94dce74b
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.3
-  espressif/cmake_utilities:
-    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.1'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.5.3
-  espressif/i2c_bus:
-    component_hash: 3a63d52b437d4456b74c9112732427ebb3bc8cd630da916866582ce51f68cc79
-    dependencies:
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com/
-      require: private
-      version: 0.*
-    - name: idf
-      require: private
-      version: '>=4.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.0
   espressif/led_strip:
     component_hash: 28c6509a727ef74925b372ed404772aeedf11cce10b78c3f69b3c66799095e2d
     dependencies:
@@ -49,10 +15,8 @@ dependencies:
       type: idf
     version: 5.2.2
 direct_dependencies:
-- espressif/bh1750
-- espressif/i2c_bus
 - espressif/led_strip
 - idf
-manifest_hash: 88cc3bbe8fbc96608024cc3bd779a85e2d911c6d22599a5336c08631c3fc9641
+manifest_hash: 78f0194c932d02e6be8f86c12280053425630cf614a8ccd2d192a1c415bd95a5
 target: esp32c3
 version: 2.0.0

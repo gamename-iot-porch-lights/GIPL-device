@@ -10,6 +10,9 @@ endif()
 # Define the source files
 set(SOURCES 
     "main.c" 
+    "led_handler.c"
+    "error_handler.c"
+    "mqtt_custom_handler.c"
 )
 
 # Specify the directory containing the header files
@@ -43,9 +46,6 @@ idf_component_register(
         driver 
         esp_wifi 
         json
-        unity
-        i2c_bus
-        bh1750
     PRIV_REQUIRES 
         gecl-ota-manager
         gecl-wifi-manager
