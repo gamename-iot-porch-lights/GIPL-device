@@ -29,6 +29,8 @@ void app_main(void)
 
     init_custom_mqtt();
 
+    init_led_handler();
+
     // Infinite loop to prevent exiting app_main
     while (true)
     {

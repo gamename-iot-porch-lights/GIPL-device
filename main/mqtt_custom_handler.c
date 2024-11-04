@@ -14,6 +14,7 @@
 #include "mbedtls/debug.h" // Add this to include mbedtls debug functions
 #include "nvs_flash.h"
 #include "error_handler.h"
+#include "led_handler.h"
 
 static const char *TAG = "MQTT_CUSTOM_HANDLER";
 
@@ -170,6 +171,55 @@ void custom_handle_mqtt_event_ota(esp_mqtt_event_handle_t event, char *my_mac_ad
         error_reload(mqtt_client_handle);
     }
 }
+#include <string.h> // Include for strcmp
+
+// ... [Other includes and code]
+
+void process_led_state(const char *data)
+{
+    cJSON *json = cJSON_Parse(data);
+    if (json == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to parse JSON");
+    }
+    else
+    {
+        cJSON *state = cJSON_GetObjectItem(json, "LED");
+        const char *led_state = cJSON_GetStringValue(state);
+        if (led_state != NULL)
+        {
+            QueueHandle_t led_queue = get_led_state_queue();
+            if (strcmp(led_state, "ON") == 0)
+            {
+                ESP_LOGI(TAG, "Sending LED state ON to the queue");
+                uint32_t led_on_event = 1;
+                if (xQueueSend(led_queue, &led_on_event, portMAX_DELAY) != pdPASS)
+                {
+                    ESP_LOGE(TAG, "Failed to send LED ON event to the queue");
+                }
+            }
+            else if (strcmp(led_state, "OFF") == 0)
+            {
+                ESP_LOGI(TAG, "Sending LED state OFF to the queue");
+                uint32_t led_off_event = 0;
+                if (xQueueSend(led_queue, &led_off_event, portMAX_DELAY) != pdPASS)
+                {
+                    ESP_LOGE(TAG, "Failed to send LED OFF event to the queue");
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Invalid LED state: %s", led_state);
+                // Handle invalid state
+            }
+        }
+        else
+        {
+            ESP_LOGE(TAG, "LED state is NULL");
+        }
+        cJSON_Delete(json);
+    }
+}
 
 void custom_handle_mqtt_event_data(esp_mqtt_event_handle_t event)
 {
@@ -183,7 +233,7 @@ void custom_handle_mqtt_event_data(esp_mqtt_event_handle_t event)
     }
     else if (strncmp(event->topic, CONFIG_MQTT_SUBSCRIBE_PORCH_LIGHTS_ILLUMINATION_TOPIC, event->topic_len) == 0)
     {
-        ESP_LOGI(TAG, "Received message: %.*s", event->data_len, event->data);
+        process_led_state(event->data);
     }
     else
     {
