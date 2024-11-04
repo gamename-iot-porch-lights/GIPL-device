@@ -21,16 +21,22 @@ static const char *TAG = "PORCH_LIGHTS";
 
 void app_main(void)
 {
+    ESP_LOGI(TAG, "Init NVS");
     init_nvs();
 
+    ESP_LOGI(TAG, "Init WiFi");
     init_wifi();
 
+    ESP_LOGI(TAG, "Init Time Sync");
     init_time_sync();
 
+    ESP_LOGI(TAG, "Init MQTT");
     init_custom_mqtt();
 
+    ESP_LOGI(TAG, "Init LED Handler");
     init_led_handler();
 
+    ESP_LOGI(TAG, "Entering infinite loop");
     // Infinite loop to prevent exiting app_main
     while (true)
     {
