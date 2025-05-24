@@ -1,3 +1,4 @@
+#include <stdbool.h> // Added for bool type
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -171,69 +172,75 @@ void custom_handle_mqtt_event_ota(esp_mqtt_event_handle_t event, char *my_mac_ad
         error_reload(mqtt_client_handle);
     }
 }
-#include <string.h> // Include for strcmp
 
-// ... [Other includes and code]
-
-void process_led_state(const char *data)
+bool process_led_state(const char *data)
 {
     cJSON *json = cJSON_Parse(data);
     if (json == NULL)
     {
         ESP_LOGE(TAG, "Failed to parse JSON");
+        return false;
+    }
+    cJSON *state = cJSON_GetObjectItem(json, "LED");
+    const char *led_state = cJSON_GetStringValue(state);
+    if (led_state == NULL)
+    {
+        ESP_LOGE(TAG, "LED state is NULL");
+        cJSON_Delete(json);
+        return false;
+    }
+    QueueHandle_t led_queue = get_led_state_queue();
+    if (strcmp(led_state, "ON") == 0)
+    {
+        ESP_LOGI(TAG, "Sending LED state ON to the queue");
+        uint32_t led_on_event = 1;
+        if (xQueueSend(led_queue, &led_on_event, portMAX_DELAY) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to send LED ON event to the queue");
+            cJSON_Delete(json);
+            return false;
+        }
+    }
+    else if (strcmp(led_state, "OFF") == 0)
+    {
+        ESP_LOGI(TAG, "Sending LED state OFF to the queue");
+        uint32_t led_off_event = 0;
+        if (xQueueSend(led_queue, &led_off_event, portMAX_DELAY) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to send LED OFF event to the queue");
+            cJSON_Delete(json);
+            return false;
+        }
     }
     else
     {
-        cJSON *state = cJSON_GetObjectItem(json, "LED");
-        const char *led_state = cJSON_GetStringValue(state);
-        if (led_state != NULL)
-        {
-            QueueHandle_t led_queue = get_led_state_queue();
-            if (strcmp(led_state, "ON") == 0)
-            {
-                ESP_LOGI(TAG, "Sending LED state ON to the queue");
-                uint32_t led_on_event = 1;
-                if (xQueueSend(led_queue, &led_on_event, portMAX_DELAY) != pdPASS)
-                {
-                    ESP_LOGE(TAG, "Failed to send LED ON event to the queue");
-                }
-            }
-            else if (strcmp(led_state, "OFF") == 0)
-            {
-                ESP_LOGI(TAG, "Sending LED state OFF to the queue");
-                uint32_t led_off_event = 0;
-                if (xQueueSend(led_queue, &led_off_event, portMAX_DELAY) != pdPASS)
-                {
-                    ESP_LOGE(TAG, "Failed to send LED OFF event to the queue");
-                }
-            }
-            else
-            {
-                ESP_LOGE(TAG, "Invalid LED state: %s", led_state);
-                // Handle invalid state
-            }
-        }
-        else
-        {
-            ESP_LOGE(TAG, "LED state is NULL");
-        }
+        ESP_LOGE(TAG, "Invalid LED state: %s", led_state);
         cJSON_Delete(json);
+        return false;
     }
+    cJSON_Delete(json);
+    return true;
 }
 
 void custom_handle_mqtt_event_data(esp_mqtt_event_handle_t event)
 {
-
     ESP_LOGW(TAG, "Received topic %.*s", event->topic_len, event->topic);
-
     if (strncmp(event->topic, CONFIG_MQTT_SUBSCRIBE_OTA_UPDATE_PORCH_LIGHTS_TOPIC, event->topic_len) == 0)
     {
-        // Use the global mac_address variable to pass the MAC address to the OTA function
         custom_handle_mqtt_event_ota(event, mac_address);
     }
     else if (strncmp(event->topic, CONFIG_MQTT_SUBSCRIBE_PORCH_LIGHTS_ILLUMINATION_TOPIC, event->topic_len) == 0)
     {
-        process_led_state(event->data);
+        if (process_led_state(event->data))
+        {
+            ESP_LOGI(TAG, "Publishing ACK to %s", CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC);
+            esp_mqtt_client_publish(event->client, CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC, "OK", 0, 1, 0);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to process LED state");
+            // Optionally, publish an error message or trigger SNS notification
+        }
     }
     else
     {
