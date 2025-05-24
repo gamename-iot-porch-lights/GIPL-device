@@ -16,6 +16,9 @@
 #include "nvs_flash.h"
 #include "error_handler.h"
 #include "led_handler.h"
+#include <ctype.h>  // For tolower
+#include <string.h> // For strlen and strcpy
+#include <stdlib.h> // For malloc and free
 
 static const char *TAG = "MQTT_CUSTOM_HANDLER";
 
@@ -189,25 +192,41 @@ bool process_led_state(const char *data)
         cJSON_Delete(json);
         return false;
     }
+    // Create a lowercase copy of led_state
+    size_t len = strlen(led_state);
+    char *led_state_lower = malloc(len + 1);
+    if (led_state_lower == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate memory for led_state_lower");
+        cJSON_Delete(json);
+        return false;
+    }
+    strcpy(led_state_lower, led_state);
+    for (char *p = led_state_lower; *p; ++p)
+    {
+        *p = tolower((unsigned char)*p);
+    }
     QueueHandle_t led_queue = get_led_state_queue();
-    if (strcmp(led_state, "ON") == 0)
+    if (strcmp(led_state_lower, "on") == 0)
     {
         ESP_LOGI(TAG, "Sending LED state ON to the queue");
         uint32_t led_on_event = 1;
         if (xQueueSend(led_queue, &led_on_event, portMAX_DELAY) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to send LED ON event to the queue");
+            free(led_state_lower);
             cJSON_Delete(json);
             return false;
         }
     }
-    else if (strcmp(led_state, "OFF") == 0)
+    else if (strcmp(led_state_lower, "off") == 0)
     {
         ESP_LOGI(TAG, "Sending LED state OFF to the queue");
         uint32_t led_off_event = 0;
         if (xQueueSend(led_queue, &led_off_event, portMAX_DELAY) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to send LED OFF event to the queue");
+            free(led_state_lower);
             cJSON_Delete(json);
             return false;
         }
@@ -215,9 +234,11 @@ bool process_led_state(const char *data)
     else
     {
         ESP_LOGE(TAG, "Invalid LED state: %s", led_state);
+        free(led_state_lower);
         cJSON_Delete(json);
         return false;
     }
+    free(led_state_lower);
     cJSON_Delete(json);
     return true;
 }
