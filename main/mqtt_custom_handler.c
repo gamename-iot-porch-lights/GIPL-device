@@ -1,4 +1,4 @@
-#include <stdbool.h> // Added for bool type
+#include <stdbool.h>
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -6,19 +6,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "freertos/timers.h" // Include FreeRTOS timers header
+#include "freertos/timers.h"
 #include "gecl-mqtt-manager.h"
 #include "gecl-nvs-manager.h"
 #include "gecl-ota-manager.h"
 #include "gecl-time-sync-manager.h"
 #include "gecl-wifi-manager.h"
-#include "mbedtls/debug.h" // Add this to include mbedtls debug functions
+#include "mbedtls/debug.h"
 #include "nvs_flash.h"
 #include "error_handler.h"
 #include "led_handler.h"
-#include <ctype.h>  // For tolower
-#include <string.h> // For strlen and strcpy
-#include <stdlib.h> // For malloc and free
+#include <ctype.h>
+#include <string.h>
+#include <stdlib.h>
 
 static const char *TAG = "MQTT_CUSTOM_HANDLER";
 
@@ -176,28 +176,36 @@ void custom_handle_mqtt_event_ota(esp_mqtt_event_handle_t event, char *my_mac_ad
     }
 }
 
-bool process_led_state(const char *data)
+bool process_led_state(const char *data, char *response, size_t response_size)
 {
     cJSON *json = cJSON_Parse(data);
     if (json == NULL)
     {
         ESP_LOGE(TAG, "Failed to parse JSON");
+        snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"none\"}");
         return false;
     }
+
     cJSON *state = cJSON_GetObjectItem(json, "LED");
+    cJSON *request_id_item = cJSON_GetObjectItem(json, "request_id");
     const char *led_state = cJSON_GetStringValue(state);
+    const char *request_id = cJSON_GetStringValue(request_id_item);
+
     if (led_state == NULL)
     {
         ESP_LOGE(TAG, "LED state is NULL");
+        snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
         cJSON_Delete(json);
         return false;
     }
+
     // Create a lowercase copy of led_state
     size_t len = strlen(led_state);
     char *led_state_lower = malloc(len + 1);
     if (led_state_lower == NULL)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for led_state_lower");
+        snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
         cJSON_Delete(json);
         return false;
     }
@@ -206,6 +214,7 @@ bool process_led_state(const char *data)
     {
         *p = tolower((unsigned char)*p);
     }
+
     QueueHandle_t led_queue = get_led_state_queue();
     if (strcmp(led_state_lower, "on") == 0)
     {
@@ -214,10 +223,12 @@ bool process_led_state(const char *data)
         if (xQueueSend(led_queue, &led_on_event, portMAX_DELAY) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to send LED ON event to the queue");
+            snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
             free(led_state_lower);
             cJSON_Delete(json);
             return false;
         }
+        snprintf(response, response_size, "{\"status\": \"on\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
     }
     else if (strcmp(led_state_lower, "off") == 0)
     {
@@ -226,18 +237,22 @@ bool process_led_state(const char *data)
         if (xQueueSend(led_queue, &led_off_event, portMAX_DELAY) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to send LED OFF event to the queue");
+            snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
             free(led_state_lower);
             cJSON_Delete(json);
             return false;
         }
+        snprintf(response, response_size, "{\"status\": \"off\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
     }
     else
     {
         ESP_LOGE(TAG, "Invalid LED state: %s", led_state);
+        snprintf(response, response_size, "{\"status\": \"error\", \"request_id\": \"%s\"}", request_id ? request_id : "none");
         free(led_state_lower);
         cJSON_Delete(json);
         return false;
     }
+
     free(led_state_lower);
     cJSON_Delete(json);
     return true;
@@ -252,15 +267,17 @@ void custom_handle_mqtt_event_data(esp_mqtt_event_handle_t event)
     }
     else if (strncmp(event->topic, CONFIG_MQTT_SUBSCRIBE_PORCH_LIGHTS_ILLUMINATION_TOPIC, event->topic_len) == 0)
     {
-        if (process_led_state(event->data))
+        char response[128]; // Adjust size based on needs
+        if (process_led_state(event->data, response, sizeof(response)))
         {
-            ESP_LOGI(TAG, "Publishing ACK to %s", CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC);
-            esp_mqtt_client_publish(event->client, CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC, "OK", 0, 1, 0);
+            ESP_LOGI(TAG, "Publishing ACK to %s with payload: %s", CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC, response);
+            esp_mqtt_client_publish(event->client, CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC, response, 0, 1, 0);
         }
         else
         {
             ESP_LOGE(TAG, "Failed to process LED state");
-            // Optionally, publish an error message or trigger SNS notification
+            // Publish error response
+            esp_mqtt_client_publish(event->client, CONFIG_MQTT_PUBLISH_ACK_PORCH_LIGHTS_ILLUMINATION_TOPIC, response, 0, 1, 0);
         }
     }
     else
@@ -296,10 +313,11 @@ void init_custom_mqtt()
     mqtt_set_event_data_handler(custom_handle_mqtt_event_data);
     mqtt_set_event_error_handler(custom_handle_mqtt_event_error);
 
-    mqtt_config_t config = {.certificate = cert,
-                            .private_key = key,
-                            .root_ca = ca,
-                            .broker_uri = CONFIG_AWS_IOT_ENDPOINT};
+    mqtt_config_t config = {
+        .certificate = cert,
+        .private_key = key,
+        .root_ca = ca,
+        .broker_uri = CONFIG_AWS_IOT_ENDPOINT};
 
     mqtt_client_handle = init_mqtt(&config);
 
