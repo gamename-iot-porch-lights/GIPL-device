@@ -13,6 +13,13 @@
         }
     },
     "terminal.integrated.defaultProfile.osx": "MyCustomProfile",
+    "git.autoRepositoryDetection": true,
+    "git.ignoreLimitWarning": true,
+    "terminal.integrated.fontSize": 12,
+    "files.associations": {
+        "*.c": "c",
+        "*.h": "c"
+    },
     "files.exclude": {
         "components/gecl-time-sync-manager": true,
         "components/gecl-ota-manager": true,
